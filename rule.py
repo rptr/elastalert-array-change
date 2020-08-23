@@ -1,12 +1,9 @@
 import dateutil.parser
 
-from elastalert.ruletypes import RuleType, CompareRule
+from elastalert.ruletypes import RuleType
+from elastalert.util import lookup_es_key
 
-# elastalert.util includes useful utility functions
-# such as converting from timestamp to datetime obj
-from elastalert.util import ts_to_dt, lookup_es_key
-
-class ArrayChangeRule(CompareRule):
+class ArrayChangeRule(RuleType):
     required_options = set(['tuplecheck', 'tuplefields'])
 
     def __init__(self, *args):
