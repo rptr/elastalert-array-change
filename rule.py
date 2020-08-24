@@ -24,16 +24,32 @@ class ArrayChangeRule(RuleType):
                     key_tuple = (es_key if len(key_tuple) == 0
                                         else '%s/%s' % (key_tuple, es_key))
 
-            if key_tuple in compare_values and not key_tuple in self.key_tuples:
+            if not key_tuple in self.key_tuples:
+#               print("Adding tuple " + key_tuple)
                 self.key_tuples.append(key_tuple)
                 self.last_event = event
 
-    def garbage_collect(self, timestamp):
         for value in self.rules['tuplecheck']:
+#           print("Checking for configured tuple " + value)
             if not value in self.key_tuples:
-                self.add_match({'@timestamp' : timestamp})
+#               print("MATCH! could not find configured tuple " + value)
+                self.add_match({'direction' : 'configured_but_not_found', 'configured_value': value})
                 break
 
+        for value in self.key_tuples:
+#           print("Checking for Elastic tuple " + value)
+            if not value in self.rules['tuplecheck']:
+#               print("MATCH! could not find Elastic tuple " + value)
+                self.add_match({'direction' : 'elastic_but_not_configured', 'elastic_value': value})
+                break
+
+
+    def get_match_str(self, match):
+        if (match['direction'] == 'configured_but_not_found'):
+            return "Configured value %s not found in Elastic" % (match['configured_value'])
+        else:
+            return "Elastic document %s not found in configuration" % (match['elastic_value'])
+
+    def garbage_collect(self, timestamp):
         self.key_tuples.clear()
         self.last_event = {}
-
