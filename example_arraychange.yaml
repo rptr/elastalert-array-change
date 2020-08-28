@@ -13,6 +13,9 @@ name: Multiple service status change
 type: "myrules.rule.ArrayChangeRule"
 index: logs
 ignore_null: true
+allow_unconfigured: false
+realert:
+    minutes: 0
 tuplecheck:
 - node1/service1
 - node1/service2
