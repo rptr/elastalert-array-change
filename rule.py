@@ -8,8 +8,7 @@ class ArrayChangeRule(RuleType):
 
     def __init__(self, *args):
         super(ArrayChangeRule, self).__init__(*args)
-        self.key_tuples = []
-        self.last_event = {}
+        self.found_tuples = []
 
     def add_data(self, data):
         compare_keys    = self.rules['tuplefields']
@@ -18,38 +17,58 @@ class ArrayChangeRule(RuleType):
         for event in data:
             key_tuple       = ''
 
+            # Match the values of the defined keys
+            # tuplefields:
+            # - keyA
+            # - keyB
+            # - keyC
+            # {"keyA" : "A", "keyB" : "B", "keyC" : "C"}
+            # to a string in this format
+            # A/B/C
             for key in compare_keys:
                 es_key = lookup_es_key(event, key)
                 if es_key:
                     key_tuple = (es_key if len(key_tuple) == 0
                                         else '%s/%s' % (key_tuple, es_key))
 
-            if not key_tuple in self.key_tuples:
-#               print("Adding tuple " + key_tuple)
-                self.key_tuples.append(key_tuple)
-                self.last_event = event
+            if not key_tuple in self.found_tuples:
+                self.found_tuples.append(key_tuple)
 
+        missing = []
+
+        # Check for expected documents
         for value in self.rules['tuplecheck']:
-#           print("Checking for configured tuple " + value)
-            if not value in self.key_tuples:
-#               print("MATCH! could not find configured tuple " + value)
-                self.add_match({'direction' : 'configured_but_not_found', 'configured_value': value})
-                break
+            if not value in self.found_tuples:
+                missing.append(value)
 
-        for value in self.key_tuples:
-#           print("Checking for Elastic tuple " + value)
-            if not value in self.rules['tuplecheck']:
-#               print("MATCH! could not find Elastic tuple " + value)
-                self.add_match({'direction' : 'elastic_but_not_configured', 'elastic_value': value})
-                break
+        if len(missing):
+            self.add_match({'direction' : 'configured_but_not_found',
+                            'missing_values': missing})
 
+        if ('allow_unconfigured' in self.rules and
+                self.rules['allow_unconfigured'] == False):
+            unexpected = []
+
+            # Check for unexpected documents
+            for value in self.found_tuples:
+                if not value in self.rules['tuplecheck']:
+                    unexpected.append(value)
+
+            if len(unexpected):
+                self.add_match({'direction' : 'found_but_not_configured',
+                                'unexpected_values': unexpected})
 
     def get_match_str(self, match):
-        if (match['direction'] == 'configured_but_not_found'):
-            return "Configured value %s not found in Elastic" % (match['configured_value'])
-        else:
-            return "Elastic document %s not found in configuration" % (match['elastic_value'])
+        if match['direction'] == 'configured_but_not_found':
+            return ("Expected document(-s) %s not found in ElasticSearch" %
+                    (match['missing_values']))
+        elif match['direction'] == 'found_but_not_configured':
+            return ("Document(-s) %s not found in rule configuration" %
+                    (match['unexpected_values']))
 
     def garbage_collect(self, timestamp):
-        self.key_tuples.clear()
-        self.last_event = {}
+        if len(self.rules['tuplecheck']) > 0 and len(self.found_tuples) == 0:
+            self.add_match({'direction' : 'configured_but_not_found',
+                            'missing_values': self.rules['tuplecheck']})
+
+        self.found_tuples.clear()
